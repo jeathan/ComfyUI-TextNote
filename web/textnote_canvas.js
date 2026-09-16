@@ -99,7 +99,9 @@ app.registerExtension({
                 const add = (type, name, value, options) =>
                     hide(this.addWidget(type, name, value, onChange, options || {}));
 
-                // 正文：官方同款多行编辑区（唯一可见元素，即便签本体）
+                // 正文：官方同款多行编辑区（唯一可见元素，即便签本体）。
+                // hideOnZoom:false — 保持任何缩放级别下文字可见
+                //（默认 true 会在 LOD 阈值约 57% 以下隐藏 DOM 编辑区）
                 const CW = window.comfyAPI?.widgets?.ComfyWidgets;
                 if (CW) {
                     this.textWidget = CW.STRING(
@@ -107,6 +109,7 @@ app.registerExtension({
                         ["STRING", { default: "在这里写说明、备注…", multiline: true }],
                         app,
                     ).widget;
+                    this.textWidget.options.hideOnZoom = false;
                 } else {
                     this.textWidget = this.addWidget("text", "text", "在这里写说明、备注…", onChange);
                 }
