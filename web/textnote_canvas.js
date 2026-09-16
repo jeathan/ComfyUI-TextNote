@@ -1,37 +1,86 @@
 /**
- * ComfyUI-TextNote v3 — 画布便签（纯正文 + 右上角齿轮设置）
+ * ComfyUI-TextNote v4 — 画布便签（纯正文 + 右上角齿轮设置 + 界面语言自适应）
  *
- * 画布上只显示便签正文文字；所有参数（字号/对齐/行距/文字颜色/背景颜色/
- * 边框颜色/加粗）收进右上角齿轮图标弹出的设置面板。
+ * 画布上只显示便签正文文字；所有参数收进右上角齿轮图标弹出的设置面板，
+ * 面板打开在正文下方，边调边看，不遮挡文字。
  * 无输入口/输出口，不参与执行；内容与设置随工作流 JSON 保存。
+ *
+ * v4 变更：
+ * - 界面语言自适应：中文浏览器显示中文，其他语言显示英文（可用 window.__TEXTNOTE_LANG__ 强制）
+ * - 颜色/对齐值改存语言无关的 hex/枚举，工作流跨语言通用；旧中文值自动迁移
  */
 import { app } from "/scripts/app.js";
 
-// ---------------- 色板 ----------------
-// 文字颜色：高饱和度 + 白 + 黑（面板内点击弹出下拉菜单选择）
-const FONT_COLORS = [
-    ["大红", "#F44336"], ["朱橙", "#FF6D00"], ["橙", "#FFAB00"], ["柠檬黄", "#FFEA00"], ["草绿", "#AEEA00"],
-    ["翠绿", "#00E676"], ["青绿", "#1DE9B6"], ["天蓝", "#40C4FF"], ["宝蓝", "#536DFE"], ["紫罗兰", "#B388FF"],
-    ["品红", "#FF4081"], ["玫红", "#F50057"], ["白", "#FFFFFF"], ["黑", "#000000"],
-];
-// 背景颜色：中等饱和度的深色系（明度约 20–40%，饱和度约 30–60%）
-const BG_COLORS = [
-    ["藏青", "#24344D"], ["墨蓝", "#2E4A7A"], ["靖蓝", "#33518F"], ["孔雀蓝", "#1F6E72"],
-    ["青碧", "#2E6B5E"], ["松柏绿", "#2F5D3A"], ["苔绿", "#5A6B3A"], ["姜饼", "#8A6E3A"],
-    ["赭石", "#8A5A2E"], ["焦茶", "#5C4632"], ["酒红", "#6B2D3E"], ["玫褐", "#8A4A5E"],
-    ["绛紫", "#5C3A6E"], ["茄紫", "#47355C"], ["珊瑚暗", "#8A4A4A"], ["墨青", "#2E5555"],
-];
-// 边框颜色：无/隐形 + 中性色调 + 莫兰迪色系
-const BORDER_COLORS = [
-    ["无/隐形", "transparent"], ["纯白", "#FFFFFF"], ["浅灰", "#D5D5D2"], ["中灰", "#A9A69E"],
-    ["深灰", "#4B4A47"], ["炭黑", "#262626"], ["灰驼", "#B3A99A"], ["雾粉", "#C9AFAA"],
-    ["豆沙", "#AD928D"], ["雾蓝", "#9AAABB"], ["雾霾蓝", "#72879A"], ["灰绿", "#93A38F"],
-    ["橄榄绿", "#7F8770"], ["雾紫", "#A395A3"], ["姜黄", "#B9A076"], ["旧粉白", "#E8E2D6"],
-];
-const ALIGN_OPTIONS = [["左对齐", "left"], ["居中", "center"], ["右对齐", "right"]];
+// ---------------- 界面语言 ----------------
+const LANG = () => {
+    const o = globalThis.__TEXTNOTE_LANG__;
+    if (o === "zh" || o === "en") return o;
+    const nav = (typeof navigator !== "undefined" && navigator.language) || "en";
+    return String(nav).toLowerCase().startsWith("zh") ? "zh" : "en";
+};
 
-const labelValue = (pairs, label, fallback) =>
-    (pairs.find((p) => p[0] === label) || [null, fallback])[1];
+const I18N = {
+    zh: {
+        settings: "设置",
+        font_size: "字号", align: "对齐", line_spacing: "行距",
+        font_color: "文字颜色", bg_color: "背景颜色", border_color: "边框颜色",
+        bold: "加粗", on: "开", off: "关",
+        left: "左对齐", center: "居中", right: "右对齐",
+        defaultText: "在这里写说明、备注…",
+        title: "📝 便签 TextNote",
+    },
+    en: {
+        settings: "Settings",
+        font_size: "Font size", align: "Align", line_spacing: "Line spacing",
+        font_color: "Text color", bg_color: "Background color", border_color: "Border color",
+        bold: "Bold", on: "On", off: "Off",
+        left: "Left", center: "Center", right: "Right",
+        defaultText: "Write notes and remarks here",
+        title: "📝 TextNote (sticky note)",
+    },
+};
+const t = (k) => (I18N[LANG()] && I18N[LANG()][k]) || I18N.en[k] || k;
+
+// ---------------- 色板（hex 为存储值；zh/en 为显示名） ----------------
+const FONT_COLORS = [
+    { hex: "#F44336", zh: "大红", en: "Red" }, { hex: "#FF6D00", zh: "朱橙", en: "Tangerine" },
+    { hex: "#FFAB00", zh: "橙", en: "Amber" }, { hex: "#FFEA00", zh: "柠檬黄", en: "Lemon" },
+    { hex: "#AEEA00", zh: "草绿", en: "Lime" }, { hex: "#00E676", zh: "翠绿", en: "Emerald" },
+    { hex: "#1DE9B6", zh: "青绿", en: "Teal" }, { hex: "#40C4FF", zh: "天蓝", en: "Sky" },
+    { hex: "#536DFE", zh: "宝蓝", en: "Blue" }, { hex: "#B388FF", zh: "紫罗兰", en: "Violet" },
+    { hex: "#FF4081", zh: "品红", en: "Magenta" }, { hex: "#F50057", zh: "玫红", en: "Rose" },
+    { hex: "#FFFFFF", zh: "白", en: "White" }, { hex: "#000000", zh: "黑", en: "Black" },
+];
+// 背景：中等饱和度深色系（明度约 20–40%，饱和度约 30–60%）
+const BG_COLORS = [
+    { hex: "#24344D", zh: "藏青", en: "Navy" }, { hex: "#2E4A7A", zh: "墨蓝", en: "Ink blue" },
+    { hex: "#33518F", zh: "靖蓝", en: "Cobalt" }, { hex: "#1F6E72", zh: "孔雀蓝", en: "Peacock" },
+    { hex: "#2E6B5E", zh: "青碧", en: "Pine teal" }, { hex: "#2F5D3A", zh: "松柏绿", en: "Pine" },
+    { hex: "#5A6B3A", zh: "苔绿", en: "Moss" }, { hex: "#8A6E3A", zh: "姜饼", en: "Ginger" },
+    { hex: "#8A5A2E", zh: "赭石", en: "Ochre" }, { hex: "#5C4632", zh: "焦茶", en: "Coffee" },
+    { hex: "#6B2D3E", zh: "酒红", en: "Wine" }, { hex: "#8A4A5E", zh: "玫褐", en: "Mulberry" },
+    { hex: "#5C3A6E", zh: "绛紫", en: "Plum" }, { hex: "#47355C", zh: "茄紫", en: "Eggplant" },
+    { hex: "#8A4A4A", zh: "珊瑚暗", en: "Coral dark" }, { hex: "#2E5555", zh: "墨青", en: "Dark teal" },
+];
+const BORDER_COLORS = [
+    { hex: "transparent", zh: "无/隐形", en: "None" }, { hex: "#FFFFFF", zh: "纯白", en: "White" },
+    { hex: "#D5D5D2", zh: "浅灰", en: "Light gray" }, { hex: "#A9A69E", zh: "中灰", en: "Gray" },
+    { hex: "#4B4A47", zh: "深灰", en: "Dark gray" }, { hex: "#262626", zh: "炭黑", en: "Charcoal" },
+    { hex: "#B3A99A", zh: "灰驼", en: "Camel" }, { hex: "#C9AFAA", zh: "雾粉", en: "Dusty pink" },
+    { hex: "#AD928D", zh: "豆沙", en: "Mauve" }, { hex: "#9AAABB", zh: "雾蓝", en: "Mist blue" },
+    { hex: "#72879A", zh: "雾霾蓝", en: "Slate blue" }, { hex: "#93A38F", zh: "灰绿", en: "Sage" },
+    { hex: "#7F8770", zh: "橄榄绿", en: "Olive" }, { hex: "#A395A3", zh: "雾紫", en: "Dusty violet" },
+    { hex: "#B9A076", zh: "姜黄", en: "Turmeric" }, { hex: "#E8E2D6", zh: "旧粉白", en: "Bone" },
+];
+
+const ALIGN_OPTIONS = ["left", "center", "right"];
+
+const paletteFor = (rowKey) =>
+    rowKey === "bg_color" ? BG_COLORS : rowKey === "border_color" ? BORDER_COLORS : FONT_COLORS;
+const colorName = (hex, palette) => {
+    const c = palette.find((x) => x.hex === hex);
+    return c ? c[LANG()] || c.en : hex;
+};
 
 const GEAR = "\u2699";       // ⚙
 const CLOSE = "\u2715";      // ✕
@@ -43,36 +92,72 @@ const PANEL_PAD = 8;
 const PANEL_GAP = 10;      // 面板与正文预览区的间距
 const GEAR_W = 22;
 
-// 文字颜色下拉菜单
+// 颜色下拉色卡
 const MENU_COLS = 4;
-const MENU_CELL_W = 64;
+const MENU_CELL_W = 88;
 const MENU_CELL_H = 22;
 const MENU_HEADER = 18;
 const MENU_PAD = 5;
 const MENU_SELECTED = "#E8C84A";
-// 使用下拉色卡选择的行（交互与文字颜色一致）
-const MENU_ROWS = ["文字颜色", "背景颜色", "边框颜色"];
+// 使用下拉色卡选择的行
+const MENU_ROWS = ["font_color", "bg_color", "border_color"];
 
-// 字号调节
-const FS_MIN = 8;
-const FS_MAX = 128;
-const FS_STEP = 2;
-
-// 数值行（− / 数字 / ＋ 三区点击）配置：字号与行距共用同一套交互
+// 数值行（− / 数字 / ＋ 三区点击）配置
 const NUM_ROWS = {
-    "字号": { min: 8, max: 128, step: 2, int: true },
-    "行距": { min: 0.8, max: 3, step: 0.1, int: false },
+    font_size: { min: 8, max: 128, step: 2, int: true },
+    line_spacing: { min: 0.8, max: 3, step: 0.1, int: false },
 };
 
-// 面板行定义：与控件名一一对应
-const PANEL_ROWS = ["字号", "对齐", "行距", "文字颜色", "背景颜色", "边框颜色", "加粗"];
+// 面板行定义（控件名 = 存储键，显示名经 i18n）
+const PANEL_ROWS = ["font_size", "align", "line_spacing", "font_color", "bg_color", "border_color", "bold"];
+
+// ---------------- 旧版（v3.x 中文存储）迁移表 ----------------
+const LEGACY_WIDGET_KEYS = {
+    "字号": "font_size", "对齐": "align", "行距": "line_spacing",
+    "文字颜色": "font_color", "背景颜色": "bg_color", "边框颜色": "border_color", "加粗": "bold",
+};
+const LEGACY_ALIGN = { "左对齐": "left", "居中": "center", "右对齐": "right" };
+const LEGACY_FONT_COLORS = {
+    "大红": "#F44336", "朱橙": "#FF6D00", "橙": "#FFAB00", "柠檬黄": "#FFEA00",
+    "草绿": "#AEEA00", "翠绿": "#00E676", "青绿": "#1DE9B6", "天蓝": "#40C4FF",
+    "宝蓝": "#536DFE", "紫罗兰": "#B388FF", "品红": "#FF4081", "玫红": "#F50057",
+    "白": "#FFFFFF", "黑": "#000000", "纸白": "#ECEFF1", "暖白": "#F5E9D9",
+    "亮黄": "#FFE082", "薄荷": "#A5F0DC", "粉红": "#F8BBD0", "中灰": "#B0BEC5",
+    "墨黑": "#333333", "纯黑": "#111111", "深红": "#B71C1C", "橘橙": "#E65100",
+    "暗金": "#827717", "深绿": "#1B5E20", "青蓝": "#006064", "深紫": "#4A148C",
+};
+const LEGACY_BG_COLORS = {
+    "石墨黑": "#1E1E1E", "炭黑": "#262626", "深灰蓝": "#1F2A33", "墨绿": "#1B2C24",
+    "深酒红": "#2C1B22", "深棕": "#2A241B", "深紫": "#241B2C", "午夜蓝": "#151E2E",
+    "纯白": "#FFFFFF", "米白": "#F2EDE4", "浅灰": "#E3E3E0", "暖灰": "#CCC7BE",
+    "中灰": "#A9A69E", "深灰": "#4B4A47", "燕麦": "#D8CFC0", "雾粉": "#D8C0BC",
+    "豆沙": "#C2A6A1", "雾蓝": "#AEBBC8", "雾霾蓝": "#8A9BAA", "灰绿": "#A8B5A4",
+    "雾紫": "#B4A8B4", "姜黄": "#CDB083", "橄榄绿": "#8F9779",
+    "便签黄": "#FFF9C4", "浅粉": "#FFEBEE", "浅绿": "#E8F5E9", "浅蓝": "#E3F2FD",
+    "浅紫": "#F3E5F5", "浅橙": "#FFF3E0", "浅青": "#E0F2F1", "纯黑": "#1A1A1A",
+    "墨蓝": "#2E4A7A", "藏青": "#24344D", "靖蓝": "#33518F", "孔雀蓝": "#1F6E72",
+    "青碧": "#2E6B5E", "松柏绿": "#2F5D3A", "苔绿": "#5A6B3A", "姜饼": "#8A6E3A",
+    "赭石": "#8A5A2E", "焦茶": "#5C4632", "酒红": "#6B2D3E", "玫褐": "#8A4A5E",
+    "绛紫": "#5C3A6E", "茄紫": "#47355C", "珊瑚暗": "#8A4A4A", "墨青": "#2E5555",
+};
+const LEGACY_BORDER_COLORS = {
+    "无/隐形": "transparent", "透明": "transparent",
+    "浅灰": "#D5D5D2", "中灰": "#A9A69E", "深灰": "#4B4A47", "炭黑": "#262626",
+    "纯白": "#FFFFFF", "灰驼": "#B3A99A", "雾粉": "#C9AFAA", "豆沙": "#AD928D",
+    "雾蓝": "#9AAABB", "雾霾蓝": "#72879A", "灰绿": "#93A38F", "橄榄绿": "#7F8770",
+    "雾紫": "#A395A3", "姜黄": "#B9A076", "旧粉白": "#E8E2D6",
+    "便签黄边": "#E6D070", "红边": "#EF9A9A", "绿边": "#A5D6A7", "蓝边": "#90CAF9",
+    "紫边": "#CE93D8", "橙边": "#FFCC80", "青边": "#80CBC4", "黑色": "#333333",
+    "石墨": "#2C2C2C", "灰蓝": "#33475C", "暗金": "#5C4E33", "暗绿": "#33473B",
+    "酒红": "#4A3038", "暗紫": "#3E334A",
+};
 
 app.registerExtension({
     name: "TextNote.CanvasNote",
     registerCustomNodes() {
         const LG = window.LiteGraph;
         if (!LG || !window.LGraphNode) {
-            console.error("[TextNote] LiteGraph 全局对象不可用，便签节点未注册");
+            console.error("[TextNote] LiteGraph global not available; TextNote not registered");
             return;
         }
 
@@ -82,15 +167,14 @@ app.registerExtension({
                 if (!this.properties) this.properties = {};
                 this.serialize_widgets = true;   // 正文 + 设置随工作流保存
                 this.isVirtualNode = true;       // 纯注解：不参与执行
-                this.color = "#4B4A47";          // 边框/标题色（默认深灰）
-                this.bgcolor = "#2E4A7A";        // 便签底色（默认墨蓝，中等饱和深色）
+                this.color = "#4B4A47";          // 边框/标题色
+                this.bgcolor = "#2E4A7A";        // 便签底色（墨蓝，中等饱和深色）
                 this.size = [320, 180];
                 this.settingsOpen = false;       // 运行时态，不序列化
-                this.openMenu = null;            // 当前打开的下拉色卡所属行名，运行时态
+                this.openMenu = null;            // 当前打开的下拉色卡所属行，运行时态
 
                 const onChange = () => this.applyNoteStyles();
                 const hide = (w) => {
-                    // 同时兼容新前端布局过滤与旧画布绘制两条路径
                     w.hidden = true;
                     if (!w.options) w.options = {};
                     w.options.hidden = true;
@@ -100,47 +184,47 @@ app.registerExtension({
                     hide(this.addWidget(type, name, value, onChange, options || {}));
 
                 // 正文：官方同款多行编辑区（唯一可见元素，即便签本体）。
-                // hideOnZoom:false — 保持任何缩放级别下文字可见
+                // hideOnZoom:false — 任何缩放级别都保持可见
                 //（默认 true 会在 LOD 阈值约 57% 以下隐藏 DOM 编辑区）
                 const CW = window.comfyAPI?.widgets?.ComfyWidgets;
                 if (CW) {
                     this.textWidget = CW.STRING(
                         this, "text",
-                        ["STRING", { default: "在这里写说明、备注…", multiline: true }],
+                        ["STRING", { default: t("defaultText"), multiline: true }],
                         app,
                     ).widget;
                     this.textWidget.options.hideOnZoom = false;
                 } else {
-                    this.textWidget = this.addWidget("text", "text", "在这里写说明、备注…", onChange);
+                    this.textWidget = this.addWidget("text", "text", t("defaultText"), onChange);
+                    if (!this.textWidget.options) this.textWidget.options = {};
+                    this.textWidget.options.hideOnZoom = false;
                 }
 
-                // 设置控件：创建即隐藏，只从齿轮面板操作
-                add("combo", "字号", "16", { values: ["12", "14", "16", "18", "22", "26", "32", "40", "52"] });
-                add("combo", "对齐", "居中", { values: ALIGN_OPTIONS.map((a) => a[0]) });
-                add("combo", "行距", "1.4", { values: ["1.0", "1.2", "1.4", "1.6", "1.8", "2.0"] });
-                add("combo", "文字颜色", "白", { values: FONT_COLORS.map((c) => c[0]) });
-                add("combo", "背景颜色", "墨蓝", { values: BG_COLORS.map((c) => c[0]) });
-                add("combo", "边框颜色", "深灰", { values: BORDER_COLORS.map((c) => c[0]) });
-                add("toggle", "加粗", false);
+                // 设置控件（隐藏；名称 = 语言无关存储键）
+                add("combo", "font_size", "16", { values: ["12", "14", "16", "18", "22", "26", "32", "40", "52"] });
+                add("combo", "align", "center", { values: ALIGN_OPTIONS });
+                add("combo", "line_spacing", "1.4", { values: ["1.0", "1.2", "1.4", "1.6", "1.8", "2.0"] });
+                add("combo", "font_color", "#FFFFFF", { values: FONT_COLORS.map((c) => c.hex) });
+                add("combo", "bg_color", "#2E4A7A", { values: BG_COLORS.map((c) => c.hex) });
+                add("combo", "border_color", "#4B4A47", { values: BORDER_COLORS.map((c) => c.hex) });
+                add("toggle", "bold", false);
 
                 this.applyNoteStyles();
             }
 
             // ---------- 齿轮与设置面板 ----------
 
-            /** 齿轮按钮矩形（标题栏右侧；标题栏在节点本体上方 y∈[-30,0]） */
+            /** 齿轮按钮矩形（标题栏右侧） */
             gearRect() {
                 return [this.size[0] - GEAR_W - 8, -26, GEAR_W, 22];
             }
 
-            /** 展开设置面板：正文预览区保留在上方（高度不变），
-             *  面板追加在正文下方 → 节点加高，两者同时可见，边调边看 */
+            /** 展开：正文预览区保留上方，面板追加在正文下方 → 同时可见，边调边看 */
             _toggleSettings(open) {
                 if (open) {
                     this._prevSize = [this.size[0], this.size[1]];
                     this._previewH = Math.max(120, Math.round(this.size[1]));
                     this.size[1] = this._previewH + PANEL_GAP + this._panelHeight() + 8;
-                    // 锁定正文编辑区高度 = 预览区高度，余下空间留给面板
                     if (this.textWidget)
                         this.textWidget.computeSize = () => [this.size[0], this._previewH];
                     this.settingsOpen = true;
@@ -157,7 +241,6 @@ app.registerExtension({
                 this.setDirtyCanvas(true, true);
             }
 
-            /** 设置面板总高 */
             _panelHeight() {
                 return PANEL_HEADER_H + PANEL_ROWS.length * PANEL_ROW_H + PANEL_PAD * 2;
             }
@@ -173,24 +256,18 @@ app.registerExtension({
                        p[1] >= r[1] && p[1] <= r[1] + r[3];
             }
 
-            /** 颜色行（文字/背景/边框）的命中矩形 */
-            _colorRowRect(rowName) {
+            /** 颜色行的命中矩形 */
+            _colorRowRect(rowKey) {
                 const pr = this.panelRect();
-                const idx = PANEL_ROWS.indexOf(rowName);
+                const idx = PANEL_ROWS.indexOf(rowKey);
                 const y = pr[1] + PANEL_HEADER_H + PANEL_PAD + idx * PANEL_ROW_H;
                 return [pr[0], y, pr[2], PANEL_ROW_H];
             }
 
-            /** 兼容旧名：文字颜色行矩形 */
-            _fontColorRowRect() {
-                return this._colorRowRect("文字颜色");
-            }
-
             /** 指定颜色行的下拉色卡矩形（锚定在面板下方，不遮挡任何面板行） */
-            menuRect(rowName) {
-                const name = rowName || this.openMenu || "文字颜色";
-                const palette = name === "背景颜色" ? BG_COLORS
-                    : name === "边框颜色" ? BORDER_COLORS : FONT_COLORS;
+            menuRect(rowKey) {
+                const key = rowKey || this.openMenu || "font_color";
+                const palette = paletteFor(key);
                 const w = MENU_COLS * MENU_CELL_W + MENU_PAD * 2;
                 const h = MENU_HEADER + Math.ceil(palette.length / MENU_COLS) * MENU_CELL_H + MENU_PAD * 2;
                 const pr = this.panelRect();
@@ -200,10 +277,9 @@ app.registerExtension({
 
             /** 色块单元格列表（色块与名称左右排列） */
             _menuCells() {
-                const name = this.openMenu || "文字颜色";
-                const palette = name === "背景颜色" ? BG_COLORS
-                    : name === "边框颜色" ? BORDER_COLORS : FONT_COLORS;
-                const mr = this.menuRect(name);
+                const key = this.openMenu || "font_color";
+                const palette = paletteFor(key);
+                const mr = this.menuRect(key);
                 const cells = [];
                 palette.forEach((c, i) => {
                     const col = i % MENU_COLS, row = Math.floor(i / MENU_COLS);
@@ -214,12 +290,11 @@ app.registerExtension({
                 return cells;
             }
 
-            /** 打开/关闭颜色下拉色卡（rowName = 文字颜色/背景颜色/边框颜色）；
-             *  色卡锚定在面板下方，节点加高容纳，不遮挡面板行与正文 */
-            _toggleColorMenu(open, rowName) {
+            /** 打开/关闭颜色下拉色卡；打开时节点加高容纳 */
+            _toggleColorMenu(open, rowKey) {
                 if (open) {
                     if (!this.settingsOpen) this._toggleSettings(true);
-                    this.openMenu = rowName || "文字颜色";
+                    this.openMenu = rowKey || "font_color";
                     const mr = this.menuRect(this.openMenu);
                     const need = mr[1] + mr[3] + 8;
                     if (this.size[1] < need) this.size[1] = need;
@@ -234,14 +309,14 @@ app.registerExtension({
                 this.setDirtyCanvas(true, true);
             }
 
-            /** 菜单点击：选中颜色写入对应控件并实时生效 */
+            /** 菜单点击：选中 hex 写入对应控件并实时生效 */
             _handleMenuClick(pos) {
-                const name = this.openMenu || "文字颜色";
+                const key = this.openMenu || "font_color";
                 for (const cell of this._menuCells()) {
                     if (pos[0] >= cell.x && pos[0] <= cell.x + cell.w &&
                         pos[1] >= cell.y && pos[1] <= cell.y + cell.h) {
-                        const w = (this.widgets || []).find((x) => x.name === name);
-                        if (w) w.value = cell.c[0];
+                        const w = (this.widgets || []).find((x) => x.name === key);
+                        if (w) w.value = cell.c.hex;
                         this.applyNoteStyles();
                         this._toggleColorMenu(false);
                         return true;
@@ -251,11 +326,11 @@ app.registerExtension({
                 return true;
             }
 
-            /** 数值行通用：弹出数字输入框，回车确认（按行配置的 min/max） */
-            _openNumberInput(rowName, domEvent) {
+            /** 数值行：弹出数字输入框，回车确认 */
+            _openNumberInput(rowKey, domEvent) {
                 if (typeof document === "undefined") return;
-                const cfg = NUM_ROWS[rowName];
-                const w = (this.widgets || []).find((x) => x.name === rowName);
+                const cfg = NUM_ROWS[rowKey];
+                const w = (this.widgets || []).find((x) => x.name === rowKey);
                 if (!cfg || !w) return;
                 const input = document.createElement("input");
                 input.type = "number";
@@ -295,15 +370,15 @@ app.registerExtension({
                 setTimeout(() => input.focus(), 0);
             }
 
-            /** 兼容旧调用：字号输入框 */
+            /** 兼容旧调用 */
             _openFontSizeInput(domEvent) {
-                return this._openNumberInput("字号", domEvent);
+                return this._openNumberInput("font_size", domEvent);
             }
 
-            /** 数值行（字号/行距）点击：命中区与绘制的 − / 数字 / ＋ 符号逐像素对齐 */
-            _handleNumericRowClick(name, pos, event, pr) {
-                const cfg = NUM_ROWS[name];
-                const w = (this.widgets || []).find((x) => x.name === name);
+            /** 数值行点击：命中区与绘制的 − / 数字 / ＋ 符号逐像素对齐 */
+            _handleNumericRowClick(key, pos, event, pr) {
+                const cfg = NUM_ROWS[key];
+                const w = (this.widgets || []).find((x) => x.name === key);
                 if (!cfg || !w) return true;
                 const right = pr[0] + pr[2] - PANEL_PAD - 4;   // 与绘制侧一致
                 const x = pos[0];
@@ -313,7 +388,6 @@ app.registerExtension({
                 const cur = Number(w.value) || cfg.min;
                 const fmt = (n) => cfg.int ? String(Math.round(n))
                                            : String(Math.round(n * 100) / 100);
-                // 右键任意位置 = 递减；左键按三区处理
                 if (event && event.button === 2) {
                     w.value = fmt(Math.max(cfg.min, cur - cfg.step));
                 } else if (inMinus) {
@@ -321,7 +395,7 @@ app.registerExtension({
                 } else if (inPlus) {
                     w.value = fmt(Math.min(cfg.max, cur + cfg.step));
                 } else if (inValue) {
-                    this._openNumberInput(name, event);
+                    this._openNumberInput(key, event);
                     return true;
                 } else {
                     return true;   // 行标签区：吞掉不动作
@@ -331,18 +405,17 @@ app.registerExtension({
                 return true;
             }
 
-            /** 面板行点击：字号/行距=三区加减/输入，颜色行=下拉色卡，其他 combo 循环取值 */
+            /** 面板行点击：数值行=三区加减/输入，颜色行=下拉色卡，其他 combo 循环取值 */
             _handlePanelClick(pos, event) {
                 const pr = this.panelRect();
                 const idx = Math.floor((pos[1] - (pr[1] + PANEL_HEADER_H + PANEL_PAD)) / PANEL_ROW_H);
-                if (idx < 0 || idx >= PANEL_ROWS.length) return true;   // 点在面板空白处，吞掉
-                const name = PANEL_ROWS[idx];
-                const w = (this.widgets || []).find((x) => x.name === name);
+                if (idx < 0 || idx >= PANEL_ROWS.length) return true;   // 面板空白处，吞掉
+                const key = PANEL_ROWS[idx];
+                const w = (this.widgets || []).find((x) => x.name === key);
                 if (!w) return true;
 
-                // 数值行（字号/行距）：命中区与符号位置逐像素对齐
-                if (NUM_ROWS[name]) {
-                    return this._handleNumericRowClick(name, pos, event, pr);
+                if (NUM_ROWS[key]) {
+                    return this._handleNumericRowClick(key, pos, event, pr);
                 }
 
                 if (w.type === "toggle") {
@@ -361,12 +434,9 @@ app.registerExtension({
                 return true;
             }
 
-            /** 节点级点击处理。
-             *  本版 litegraph 的节点钩子名是 onMouseDown（旧版同样）；
-             *  标题栏与正文区域的点击都会进到这里。返回 true 吃掉事件。 */
+            /** 节点级点击处理（本版 litegraph 的节点钩子是 onMouseDown） */
             onMouseDown(event, pos, graphcanvas) {
                 if (this.flags && this.flags.collapsed) return false;
-                // 兼容 pointerdown / mousedown；抬起阶段不触发切换
                 const isDown = !event || !event.type || !/up$|move/.test(event.type);
                 const isLeft = !event || event.button === undefined || event.button === 0;
                 if (this._pointInRect(pos, this.gearRect())) {
@@ -375,45 +445,42 @@ app.registerExtension({
                     }
                     return true;
                 }
-                // 颜色菜单打开时优先处理：菜单内点击选色
+                // 颜色菜单打开时优先处理
                 if (this.openMenu) {
                     const mr = this.menuRect(this.openMenu);
                     if (this._pointInRect(pos, mr)) {
                         if (isDown && isLeft) this._handleMenuClick(pos);
                         return true;
                     }
-                    // 点在任意颜色行上 → 交给下方行逻辑切换/收起；其他区域则关闭
-                    const onColorRow = MENU_ROWS.some((rn) => this._pointInRect(pos, this._colorRowRect(rn)));
+                    const onColorRow = MENU_ROWS.some((rk) => this._pointInRect(pos, this._colorRowRect(rk)));
                     if (!onColorRow) this._toggleColorMenu(false);
                 }
                 if (this.settingsOpen) {
                     const pr = this.panelRect();
                     if (this._pointInRect(pos, pr)) {
-                        // 三个颜色行：点击弹出下拉色卡
                         if (isDown && isLeft) {
-                            for (const rowName of MENU_ROWS) {
-                                if (this._pointInRect(pos, this._colorRowRect(rowName))) {
-                                    const wasOpen = this.openMenu === rowName;
-                                    this._toggleColorMenu(!wasOpen, rowName);   // 再点同一行 = 收起
+                            for (const rowKey of MENU_ROWS) {
+                                if (this._pointInRect(pos, this._colorRowRect(rowKey))) {
+                                    const wasOpen = this.openMenu === rowKey;
+                                    this._toggleColorMenu(!wasOpen, rowKey);   // 再点同一行 = 收起
                                     return true;
                                 }
                             }
                         }
                         if (isDown) {
-                            // ✕ 关闭按钮
                             if (pos[0] > pr[0] + pr[2] - 24 && pos[1] < pr[1] + PANEL_HEADER_H) {
                                 this._toggleSettings(false);
                                 return true;
                             }
                             return this._handlePanelClick(pos, event);
                         }
-                        return true;   // 面板内悬停/滚轮也吞掉，避免误拖正文
+                        return true;   // 面板内悬停/滚轮吞掉
                     }
                 }
                 return false;
- }
+            }
 
-            /** 标题栏绘制：右侧齿轮（打开时高亮）；折叠态不画 */
+            /** 标题栏：右侧齿轮（打开时高亮）；折叠态不画 */
             onDrawTitle(ctx) {
                 if (this.flags && this.flags.collapsed) return;
                 const r = this.gearRect();
@@ -431,22 +498,18 @@ app.registerExtension({
                 ctx.textBaseline = "middle";
                 ctx.fillText(GEAR, r[0] + r[2] / 2, r[1] + r[3] / 2 + 1);
                 ctx.restore();
-                // 本版 litegraph 的 drawTitleText 不会复位 textAlign；
-                // 不复位会污染后续标题文字绘制
-                ctx.textAlign = "left";
+                ctx.textAlign = "left";   // 不污染后续标题绘制
             }
 
-            /** 主体绘制：设置面板（展开时），纯 canvas，无 DOM */
+            /** 主体绘制：设置面板（展开时），纯 canvas */
             onDrawBackground(ctx) {
-                // Vue 若重建过 DOM 编辑区（工作流加载 / widget 重挂载），样式会丢；
-                // 借重绘检查标记位，缺样式则自动重放
+                // Vue 重建 DOM 后样式丢失的自检重放
                 const ta0 = this.textWidget && (this.textWidget.inputEl || this.textWidget.element);
                 if (ta0 && ta0.dataset && ta0.dataset.tnStyled !== "1") this.applyNoteStyles();
                 if (!this.settingsOpen || (this.flags && this.flags.collapsed)) return;
                 const pr = this.panelRect();
                 ctx.save();
 
-                // 面板底
                 ctx.fillStyle = "rgba(10,10,10,0.96)";
                 ctx.beginPath();
                 ctx.roundRect ? ctx.roundRect(pr[0], pr[1], pr[2], pr[3], 6)
@@ -456,12 +519,11 @@ app.registerExtension({
                 ctx.lineWidth = 1;
                 ctx.stroke();
 
-                // 头部
                 ctx.fillStyle = "rgba(236,239,241,0.85)";
                 ctx.font = "12px sans-serif";
                 ctx.textAlign = "left";
                 ctx.textBaseline = "middle";
-                ctx.fillText("设置", pr[0] + PANEL_PAD + 4, pr[1] + PANEL_HEADER_H / 2);
+                ctx.fillText(t("settings"), pr[0] + PANEL_PAD + 4, pr[1] + PANEL_HEADER_H / 2);
                 ctx.fillText(CLOSE, pr[0] + pr[2] - 14, pr[1] + PANEL_HEADER_H / 2);
                 ctx.strokeStyle = "rgba(255,255,255,0.10)";
                 ctx.beginPath();
@@ -469,25 +531,19 @@ app.registerExtension({
                 ctx.lineTo(pr[0] + pr[2] - 4, pr[1] + PANEL_HEADER_H);
                 ctx.stroke();
 
-                // 行
                 const byName = {};
                 for (const w of this.widgets || []) byName[w.name] = w;
-                PANEL_ROWS.forEach((name, i) => {
+                PANEL_ROWS.forEach((key, i) => {
                     const y = pr[1] + PANEL_HEADER_H + PANEL_PAD + i * PANEL_ROW_H;
-                    const w = byName[name];
-                    let valueText = "";
-                    if (w) {
-                        if (w.type === "toggle") valueText = w.value ? "开" : "关";
-                        else valueText = String(w.value);
-                    }
+                    const w = byName[key];
                     const midY = y + PANEL_ROW_H / 2;
                     ctx.fillStyle = "rgba(176,190,197,0.85)";
                     ctx.textAlign = "left";
-                    ctx.fillText(name, pr[0] + PANEL_PAD + 4, midY);
+                    ctx.fillText(t(key), pr[0] + PANEL_PAD + 4, midY);
 
                     const right = pr[0] + pr[2] - PANEL_PAD - 4;
-                    if (NUM_ROWS[name]) {
-                        // 三区：− ｜ 数字 ｜ ＋（符号位置即点击区）
+                    if (NUM_ROWS[key]) {
+                        const valueText = w ? String(w.value) : "";
                         ctx.textAlign = "left";
                         ctx.fillStyle = "rgba(236,239,241,0.75)";
                         ctx.fillText("−", right - 96, midY);
@@ -497,16 +553,13 @@ app.registerExtension({
                         ctx.textAlign = "left";
                         ctx.fillStyle = "rgba(236,239,241,0.75)";
                         ctx.fillText("＋", right - 14, midY);
-                    } else if (MENU_ROWS.includes(name)) {
-                        // 三个颜色行：颜色名 + 小色块，左右排列
-                        const palette = name === "背景颜色" ? BG_COLORS
-                            : name === "边框颜色" ? BORDER_COLORS : FONT_COLORS;
-                        const hex = labelValue(palette, valueText, name === "文字颜色" ? "#FFFFFF" : "#262626");
+                    } else if (MENU_ROWS.includes(key)) {
+                        const hex = w ? String(w.value) : "";
+                        const nameText = colorName(hex, paletteFor(key));
                         ctx.textAlign = "left";
                         ctx.fillStyle = "#ECEFF1";
-                        ctx.fillText(valueText, right - 62, midY);
+                        ctx.fillText(nameText, right - 62, midY);
                         if (hex === "transparent") {
-                            // 无/隐形：画斜线占位框
                             ctx.strokeStyle = "rgba(128,128,128,0.8)";
                             ctx.lineWidth = 1;
                             ctx.strokeRect(right - 18.5, midY - 6.5, 19, 13);
@@ -524,11 +577,16 @@ app.registerExtension({
                             }
                         }
                     } else {
+                        let valueText = "";
+                        if (w) {
+                            if (w.type === "toggle") valueText = w.value ? t("on") : t("off");
+                            else if (key === "align") valueText = t(String(w.value)) || String(w.value);
+                            else valueText = String(w.value);
+                        }
                         ctx.textAlign = "right";
                         ctx.fillStyle = "#ECEFF1";
                         ctx.fillText("‹ " + valueText + " ›", right, midY);
                     }
-                    // 行分隔
                     if (i < PANEL_ROWS.length - 1) {
                         ctx.strokeStyle = "rgba(255,255,255,0.06)";
                         ctx.beginPath();
@@ -539,16 +597,14 @@ app.registerExtension({
                 });
                 ctx.restore();
 
-                // 颜色下拉色卡（浮在最上层，最后画）
                 if (this.openMenu) this._drawColorMenu(ctx, this.openMenu);
             }
 
-            /** 颜色下拉色卡绘制（色块与名称左右排列；rowName = 文字/背景/边框颜色） */
-            _drawColorMenu(ctx, rowName) {
-                const name = rowName || this.openMenu || "文字颜色";
-                const palette = name === "背景颜色" ? BG_COLORS
-                    : name === "边框颜色" ? BORDER_COLORS : FONT_COLORS;
-                const mr = this.menuRect(name);
+            /** 颜色下拉色卡绘制（色块与名称左右排列） */
+            _drawColorMenu(ctx, rowKey) {
+                const key = rowKey || this.openMenu || "font_color";
+                const palette = paletteFor(key);
+                const mr = this.menuRect(key);
                 ctx.save();
                 ctx.fillStyle = "rgba(12,12,12,0.97)";
                 ctx.beginPath();
@@ -562,11 +618,10 @@ app.registerExtension({
                 ctx.font = "10px sans-serif";
                 ctx.textAlign = "left";
                 ctx.textBaseline = "middle";
-                ctx.fillText(name, mr[0] + MENU_PAD + 2, mr[1] + MENU_HEADER / 2);
-                const selected = (this.widgets || []).find((w) => w.name === name)?.value;
+                ctx.fillText(t(key), mr[0] + MENU_PAD + 2, mr[1] + MENU_HEADER / 2);
+                const selected = (this.widgets || []).find((w) => w.name === key)?.value;
                 for (const cell of this._menuCells()) {
-                    // 左：色块；右：名称（同一行左右排列）
-                    if (cell.c[1] === "transparent") {
+                    if (cell.c.hex === "transparent") {
                         ctx.strokeStyle = "rgba(128,128,128,0.8)";
                         ctx.lineWidth = 1;
                         ctx.strokeRect(cell.x + 4.5, cell.y + (cell.h - 12) / 2 - 0.5, 17, 13);
@@ -575,15 +630,15 @@ app.registerExtension({
                         ctx.lineTo(cell.x + 21.5, cell.y + (cell.h - 12) / 2 - 0.5);
                         ctx.stroke();
                     } else {
-                        ctx.fillStyle = cell.c[1];
+                        ctx.fillStyle = cell.c.hex;
                         ctx.fillRect(cell.x + 4, cell.y + (cell.h - 12) / 2, 16, 12);
-                        if (cell.c[1] === "#FFFFFF" || cell.c[1] === "#000000") {
+                        if (cell.c.hex === "#FFFFFF" || cell.c.hex === "#000000") {
                             ctx.strokeStyle = "rgba(128,128,128,0.8)";
                             ctx.lineWidth = 1;
                             ctx.strokeRect(cell.x + 4.5, cell.y + (cell.h - 12) / 2 - 0.5, 17, 13);
                         }
                     }
-                    if (cell.c[0] === selected) {
+                    if (cell.c.hex === selected) {
                         ctx.strokeStyle = MENU_SELECTED;
                         ctx.lineWidth = 2;
                         ctx.strokeRect(cell.x + 1.5, cell.y + 1.5, cell.w - 3, cell.h - 3);
@@ -591,33 +646,32 @@ app.registerExtension({
                     ctx.fillStyle = "rgba(236,239,241,0.85)";
                     ctx.font = "11px sans-serif";
                     ctx.textAlign = "left";
-                    ctx.fillText(cell.c[0], cell.x + 26, cell.y + cell.h / 2);
+                    ctx.fillText(cell.c[LANG()] || cell.c.en, cell.x + 26, cell.y + cell.h / 2);
                 }
                 ctx.restore();
             }
 
-            /** 把设置应用到正文 textarea 与节点外框；同时按开关显隐 textarea */
+            /** 应用设置到正文 textarea 与节点外框 */
             applyNoteStyles() {
                 const byName = {};
                 for (const x of this.widgets || []) byName[x.name] = x;
-                const v = (name, dft) => (byName[name] ? byName[name].value : dft);
+                const v = (name, dft) => (byName[name] !== undefined && byName[name] !== null ? byName[name].value : dft);
 
-                const fontColor = labelValue(FONT_COLORS, v("文字颜色", "白"), "#FFFFFF");
-                const bgColor = labelValue(BG_COLORS, v("背景颜色", "墨蓝"), "#2E4A7A");
-                let borderColor = labelValue(BORDER_COLORS, v("边框颜色", "深灰"), "#3A3A3A");
-                const align = labelValue(ALIGN_OPTIONS, v("对齐", "居中"), "center");
-                const fs = Number(v("字号", "16")) || 16;
-                const lh = Number(v("行距", "1.4")) || 1.4;
-                const bold = !!v("加粗", false);
+                const fontColor = v("font_color", "#FFFFFF");
+                const bgColor = v("bg_color", "#2E4A7A");
+                let borderColor = v("border_color", "#4B4A47");
+                const align = v("align", "center");
+                const fs = Number(v("font_size", "16")) || 16;
+                const lh = Number(v("line_spacing", "1.4")) || 1.4;
+                const bold = !!v("bold", false);
 
-                // 边框/背景映射到节点外框；"无/隐形" → 边框融入底色
                 this.bgcolor = bgColor;
                 this.color = borderColor === "transparent" ? bgColor : borderColor;
 
                 const ta = this.textWidget && (this.textWidget.inputEl || this.textWidget.element);
                 if (ta) {
                     const s = ta.style;
-                    if (ta.dataset) ta.dataset.tnStyled = "1";   // 样式标记，供重绘自检
+                    if (ta.dataset) ta.dataset.tnStyled = "1";
                     s.fontSize = fs + "px";
                     s.lineHeight = String(lh);
                     s.textAlign = align;
@@ -628,10 +682,9 @@ app.registerExtension({
                     s.border = "none";
                     s.outline = "none";
                     s.boxShadow = "none";
-                    s.padding = "0";            // 无左右边距
+                    s.padding = "0";
                     s.boxSizing = "border-box";
                     s.width = "100%";
-                    // 面板展开时锁定为预览区高度（与 computeSize 一致）；收起时填满节点
                     s.height = (this.settingsOpen && this._previewH)
                         ? this._previewH + "px"
                         : "100%";
@@ -640,9 +693,44 @@ app.registerExtension({
                 if (this.setDirtyCanvas) this.setDirtyCanvas(true, false);
             }
 
-            /** 工作流加载 / 粘贴后：还原控件值 → 重放样式，并复位面板为收起 */
-            onConfigure() {
+            /** 工作流加载/粘贴：迁移旧中文存储 → 重放样式 → 复位面板 */
+            onConfigure(info) {
+                try {
+                    const pairs = (info && info.widgets) || [];
+                    const get = (name) => {
+                        for (const p of pairs) {
+                            const n = Array.isArray(p) ? p[0] : p && p.name;
+                            const v = Array.isArray(p) ? p[1] : p && p.value;
+                            if (n === name) return v;
+                        }
+                        return undefined;
+                    };
+                    const setIf = (k, v) => {
+                        const w = (this.widgets || []).find((x) => x.name === k);
+                        if (w && v !== undefined && v !== null) w.value = v;
+                    };
+                    // 新版键直接还原
+                    for (const k of ["font_size", "align", "line_spacing", "font_color", "bg_color", "border_color", "bold"]) {
+                        setIf(k, get(k));
+                    }
+                    // 旧版中文键迁移
+                    for (const [oldName, newKey] of Object.entries(LEGACY_WIDGET_KEYS)) {
+                        const v = get(oldName);
+                        if (v === undefined) continue;
+                        if (newKey === "align") setIf(newKey, LEGACY_ALIGN[v] ?? v);
+                        else if (newKey === "bold") setIf(newKey, v);
+                        else if (newKey === "font_size" || newKey === "line_spacing") setIf(newKey, String(v));
+                        else {
+                            const table = newKey === "font_color" ? LEGACY_FONT_COLORS
+                                : newKey === "bg_color" ? LEGACY_BG_COLORS : LEGACY_BORDER_COLORS;
+                            setIf(newKey, table[v] ?? v);
+                        }
+                    }
+                } catch (e) {
+                    console.warn("[TextNote] legacy migration failed:", e);
+                }
                 this.settingsOpen = false;
+                this.openMenu = null;
                 this._previewH = null;
                 if (this.textWidget) delete this.textWidget.computeSize;
                 setTimeout(() => this.applyNoteStyles(), 0);
@@ -650,11 +738,11 @@ app.registerExtension({
         }
 
         LG.registerNodeType("TextNote", Object.assign(TextNoteNode, {
-            title: "📝 便签 TextNote",
+            title: t("title"),
             collapsable: true,
         }));
         TextNoteNode.category = "utilities";   // 与官方 Note 同分类
 
-        console.info("[TextNote] v3 便签已注册（纯正文 + 右上角齿轮设置）");
+        console.info("[TextNote] v4 sticky-note registered (canvas annotation, gear settings, zh/en UI)");
     },
 });
