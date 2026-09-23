@@ -4,7 +4,7 @@
 
 **中文说明见下方 / [中文说明](#中文说明)**
 
-![version](https://img.shields.io/badge/version-4.0.0-blue) ![ComfyUI](https://img.shields.io/badge/ComfyUI-0.35%2B-green) ![license](https://img.shields.io/badge/license-MIT-orange)
+![version](https://img.shields.io/badge/version-4.2.0-blue) ![ComfyUI](https://img.shields.io/badge/ComfyUI-0.35%2B-green) ![license](https://img.shields.io/badge/license-MIT-orange)
 
 | Settings panel | Text color palette |
 |---|---|
@@ -56,6 +56,8 @@ No dependencies beyond what ComfyUI already ships (nothing to pip-install).
 1. Restart ComfyUI (or just reload the browser page)
 2. Double-click empty canvas → search **`TextNote`** (category `utilities`, next to the built-in Note)
 3. Type your note; click the **⚙** in the top-right corner of the title bar to style it
+
+A new note starts **empty**: the grey hint (*"Write notes here…"*) is only a placeholder — double-click and type straight away, there is nothing to delete first. Workflows saved with the old version, where that hint was stored as real text, are cleaned up automatically on load.
 
 ### Compatibility
 
@@ -119,6 +121,8 @@ ComfyUI/custom_nodes/ComfyUI-TextNote/
 1. 重启 ComfyUI（或刷新浏览器页面）
 2. 双击画布空白处搜索 **`便签`** 或 **`TextNote`**（`utilities` 分类，官方 Note 旁边）
 3. 直接写字；点标题栏右上角 **⚙** 调样式
+
+新建便签的正文是**空的**：画布上的灰色小字（"在这里写说明、备注…"）**只是占位提示**，双击就能直接输入，不用先把它删掉。旧版本把这段提示当成正文存进工作流的情况，加载时会自动识别并清空。
 
 ### 兼容性
 

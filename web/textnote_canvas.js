@@ -1,13 +1,19 @@
 /**
- * ComfyUI-TextNote v4 — 画布便签（纯正文 + 右上角齿轮设置 + 界面语言自适应）
+ * ComfyUI-TextNote v4.2 — 画布便签（纯正文 + 齿轮设置 + 界面语言自适应 + 超链接）
  *
- * 画布上只显示便签正文文字；所有参数收进右上角齿轮图标弹出的设置面板，
- * 面板打开在正文下方，边调边看，不遮挡文字。
- * 无输入口/输出口，不参与执行；内容与设置随工作流 JSON 保存。
+ * 画布上只显示便签正文；所有参数收进右上角齿轮设置面板，面板在正文下方，
+ * 边调边看不遮挡。无输入口/输出口，不参与执行；内容与设置随工作流 JSON 保存。
  *
- * v4 变更：
- * - 界面语言自适应：中文浏览器显示中文，其他语言显示英文（可用 window.__TEXTNOTE_LANG__ 强制）
- * - 颜色/对齐值改存语言无关的 hex/枚举，工作流跨语言通用；旧中文值自动迁移
+ * v4.2 变更（占位提示不再写进正文）：
+ * - 新建便签的正文默认为空字符串；「在这里写说明、备注…」等文案只是占位提示
+ *   （textarea placeholder + 渲染层灰字），双击即可直接输入，无需先删掉提示文字
+ * - 旧工作流里被当成正文保存过的占位提示，加载时自动识别并清空
+ * - 顺带修好：齿轮设置面板展开时，正文预览区不再变成空白（面板在下方，本就不重叠）
+ *
+ * v4.1 变更（学习 MarkdownNote）：
+ * - 正文支持超链接：[标题](URL) 与裸 URL 自动转可点击链接（下划线 + 链接色，新标签页打开）
+ * - 顺带支持轻量 Markdown：# 标题 / - 列表 / **加粗**
+ * - 非编辑态 = 渲染层（链接可点击）；双击正文进入编辑态（textarea），失焦回到渲染层
  */
 import { app } from "/scripts/app.js";
 
@@ -19,6 +25,8 @@ const LANG = () => {
     return String(nav).toLowerCase().startsWith("zh") ? "zh" : "en";
 };
 
+// defaultText = 空便签时的「占位提示」文案，只用于显示（渲染层灰字 / textarea placeholder），
+// 绝不写入正文控件，因此双击编辑时不会出现需要先删掉的假文字
 const I18N = {
     zh: {
         settings: "设置",
@@ -26,7 +34,7 @@ const I18N = {
         font_color: "文字颜色", bg_color: "背景颜色", border_color: "边框颜色",
         bold: "加粗", on: "开", off: "关",
         left: "左对齐", center: "居中", right: "右对齐",
-        defaultText: "在这里写说明、备注…",
+        defaultText: "在这里写说明、备注…\n双击编辑；支持 [标题](链接) 超链接",
         title: "📝 便签 TextNote",
     },
     en: {
@@ -35,7 +43,7 @@ const I18N = {
         font_color: "Text color", bg_color: "Background color", border_color: "Border color",
         bold: "Bold", on: "On", off: "Off",
         left: "Left", center: "Center", right: "Right",
-        defaultText: "Write notes and remarks here",
+        defaultText: "Write notes here…\nDouble-click to edit; [label](link) supported",
         title: "📝 TextNote (sticky note)",
     },
 };
@@ -81,6 +89,102 @@ const colorName = (hex, palette) => {
     const c = palette.find((x) => x.hex === hex);
     return c ? c[LANG()] || c.en : hex;
 };
+
+// ---------------- 富文本渲染（超链接 / 标题 / 列表 / 加粗） ----------------
+// 学习 MarkdownNote：非编辑态把正文渲染为 HTML，链接带下划线、新标签页打开。
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/** 只放行安全协议；www. 开头自动补 https */
+function safeHref(u) {
+    const s = String(u || "").trim();
+    if (/^(https?:|mailto:|ftp:)/i.test(s)) return s;
+    if (/^www\./i.test(s)) return "https://" + s;
+    return null;   // 拦截 javascript: / data: 等危险协议
+}
+
+function _anchor(labelHtml, href) {
+    return `<a href="${escapeHtml(href)}" title="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"`
+        + ` style="color:#8EC2FF;text-decoration:underline;text-underline-offset:2px;pointer-events:auto;cursor:pointer">${labelHtml}</a>`;
+}
+
+function _bold(escapedText) {
+    return escapedText.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+}
+
+/** 行内渲染：[标题](URL) / 裸 URL / **加粗**（先分词再转义，防 XSS） */
+function renderInline(raw) {
+    const RE = /\[([^\]\n]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+)/g;
+    let out = "", last = 0, m;
+    while ((m = RE.exec(raw))) {
+        out += _bold(escapeHtml(raw.slice(last, m.index)));
+        if (m[1] !== undefined) {
+            const href = safeHref(m[2]);
+            out += href ? _anchor(escapeHtml(m[1]), href)
+                        : escapeHtml(`[${m[1]}](${m[2]})`);
+        } else {
+            const u = m[0];
+            out += _anchor(escapeHtml(u), u.startsWith("www.") ? "https://" + u : u);
+        }
+        last = m.index + m[0].length;
+    }
+    out += _bold(escapeHtml(raw.slice(last)));
+    return out;
+}
+
+/** 整段渲染：# 标题 / - 列表 / 空行间距 / 段落；空文本只显示灰色占位提示 */
+function renderRichText(text) {
+    const raw = String(text ?? "");
+    // 空便签：灰字提示（pre-wrap 保留换行），它只是提示，不参与正文
+    if (!raw.trim())
+        return `<div style="opacity:.45;white-space:pre-wrap">${escapeHtml(t("defaultText"))}</div>`;
+    const parts = [];
+    for (const line of raw.split(/\r?\n/)) {
+        if (!line.trim()) { parts.push(`<div style="height:0.5em"></div>`); continue; }
+        const h = line.match(/^\s{0,3}(#{1,4})\s+(.*)$/);
+        if (h) {
+            const size = ["1.5em", "1.3em", "1.15em", "1.05em"][h[1].length - 1];
+            parts.push(`<div style="font-weight:700;font-size:${size};margin:2px 0">${renderInline(h[2])}</div>`);
+            continue;
+        }
+        const b = line.match(/^\s*[-*•]\s+(.*)$/);
+        if (b) {
+            parts.push(`<div style="padding-left:1.1em;text-indent:-0.7em">${renderInline("• " + b[1])}</div>`);
+            continue;
+        }
+        parts.push(`<div>${renderInline(line)}</div>`);
+    }
+    return parts.join("") || `<div></div>`;
+}
+
+// ---------------- 占位提示（只提示，不进正文） ----------------
+/** 归一化：统一换行、去首尾空白，用于识别「被当成正文存下来的占位提示」 */
+function normalizeNoteText(s) {
+    return String(s ?? "").replace(/\r\n?/g, "\n").trim();
+}
+
+/** 历史上曾被写进正文默认值的占位文案；加载旧工作流时按此表清空。
+ *  这些都是「真被当成正文存过」的历史字面量，因此独立于 I18N 冻结在此，不再随界面文案变动。 */
+const LEGACY_PLACEHOLDER_TEXTS = new Set([
+    "在这里写说明、备注…",                                              // v3 / v4.0 中文
+    "Write notes and remarks here",                                     // v4.0 英文
+    "在这里写说明、备注…\n双击编辑；支持 [标题](链接) 超链接",              // v4.1 中文
+    "Write notes here…\nDouble-click to edit; [label](link) supported",  // v4.1 英文
+].map(normalizeNoteText));
+
+/** textarea 的 placeholder 颜色跟随正文色（Chrome 默认灰在深色便签上偏暗） */
+const PLACEHOLDER_STYLE_ID = "textnote-placeholder-style";
+function ensurePlaceholderStyle() {
+    if (typeof document === "undefined" || !document.head ||
+        typeof document.getElementById !== "function") return;
+    if (document.getElementById(PLACEHOLDER_STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = PLACEHOLDER_STYLE_ID;
+    style.textContent = "textarea.tn-textnote-input::placeholder{color:currentColor;opacity:.45}";
+    document.head.appendChild(style);
+}
 
 const GEAR = "\u2699";       // ⚙
 const CLOSE = "\u2715";      // ✕
@@ -172,6 +276,9 @@ app.registerExtension({
                 this.size = [320, 180];
                 this.settingsOpen = false;       // 运行时态，不序列化
                 this.openMenu = null;            // 当前打开的下拉色卡所属行，运行时态
+                this._editMode = false;          // 正文编辑态（双击进入，失焦退出）
+                this._renderDiv = null;          // 渲染层 DOM（超链接等富文本）
+                this._lastBodyClick = 0;
 
                 const onChange = () => this.applyNoteStyles();
                 const hide = (w) => {
@@ -186,16 +293,19 @@ app.registerExtension({
                 // 正文：官方同款多行编辑区（唯一可见元素，即便签本体）。
                 // hideOnZoom:false — 任何缩放级别都保持可见
                 //（默认 true 会在 LOD 阈值约 57% 以下隐藏 DOM 编辑区）
+                // 默认值必须是空字符串：提示文案只做占位显示（textarea placeholder + 渲染层灰字），
+                // 否则用户双击编辑时会看到一段需要先删掉的假正文。
+                // placeholder 由前端 createMultilineInputElement 原生写到 textarea 上。
                 const CW = window.comfyAPI?.widgets?.ComfyWidgets;
                 if (CW) {
                     this.textWidget = CW.STRING(
                         this, "text",
-                        ["STRING", { default: t("defaultText"), multiline: true }],
+                        ["STRING", { default: "", multiline: true, placeholder: t("defaultText") }],
                         app,
                     ).widget;
                     this.textWidget.options.hideOnZoom = false;
                 } else {
-                    this.textWidget = this.addWidget("text", "text", t("defaultText"), onChange);
+                    this.textWidget = this.addWidget("text", "text", "", onChange);
                     if (!this.textWidget.options) this.textWidget.options = {};
                     this.textWidget.options.hideOnZoom = false;
                 }
@@ -210,6 +320,119 @@ app.registerExtension({
                 add("toggle", "bold", false);
 
                 this.applyNoteStyles();
+                // 渲染层在 textarea 挂载后由 _syncRenderDiv 自愈创建；
+                // 构造期 DOM 通常尚未挂载，不在此处强建
+            }
+
+            // ---------- 正文渲染层（超链接等富文本） ----------
+
+            /** 正文区像素高度（显式值，避免 100% 在容器未定高时塌缩为 0） */
+            _bodyHeightPx() {
+                if (this.settingsOpen && this._previewH) return this._previewH;
+                return Math.max(60, Math.round(this.size[1]) - 34);
+            }
+
+            /** 确保渲染层 div 存在、挂在 textarea 同父；未挂载时安全跳过（下帧重试） */
+            _ensureRenderDiv() {
+                const ta = this.textWidget && (this.textWidget.inputEl || this.textWidget.element);
+                if (!ta || typeof document === "undefined" || !ta.parentElement) return null;
+                let div = this._renderDiv;
+                if (!div) {
+                    div = document.createElement("div");
+                    this._renderDiv = div;
+                }
+                if (div.parentElement !== ta.parentElement) {
+                    ta.parentElement.appendChild(div);
+                }
+                // 渲染层交互：双击进编辑；链接点击直接放行（新标签页打开）
+                if (!div.__tnBound && div.addEventListener) {
+                    div.addEventListener("dblclick", (ev) => {
+                        if (ev.target && ev.target.closest && ev.target.closest("a")) return;   // 链接上双击不进编辑
+                        ev.stopPropagation();
+                        this._enterEditMode();
+                    });
+                    div.addEventListener("click", (ev) => {
+                        // 点在链接上：放行默认行为（新标签页打开），其余冒泡给画布拖动
+                        if (ev.target && ev.target.closest && ev.target.closest("a")) {
+                            ev.stopPropagation();
+                        }
+                    });
+                    div.__tnBound = true;
+                }
+                // 编辑态退出绑定（textarea 可能被 Vue 重建，逐个绑定）
+                if (!ta.__tnBlurBound && ta.addEventListener) {
+                    ta.addEventListener("blur", () => { if (this._editMode) this._exitEditMode(); });
+                    ta.__tnBlurBound = true;
+                }
+                return div;
+            }
+
+            /** 旧版把占位提示存成了正文 → 视为空便签清掉（按值判断，幂等，可反复调用） */
+            _clearLegacyPlaceholder(widget) {
+                const w = widget || (this.widgets || []).find((x) => x.name === "text");
+                if (!w || typeof w.value !== "string" || !w.value) return false;
+                if (!LEGACY_PLACEHOLDER_TEXTS.has(normalizeNoteText(w.value))) return false;
+                w.value = "";   // 只清正文；提示仍由渲染层 / placeholder 显示
+                return true;
+            }
+
+            /** 用正文当前值重渲染 HTML */
+            _renderIntoDiv() {
+                const div = this._renderDiv;
+                if (!div) return;
+                const w = (this.widgets || []).find((x) => x.name === "text");
+                this._clearLegacyPlaceholder(w);
+                const val = w ? String(w.value ?? "") : "";
+                div.innerHTML = renderRichText(val);
+                div.__lastText = val;
+            }
+
+            /** 逐帧同步渲染层位置（跟随前端对 textarea 的定位）；兼做自愈：
+             *  div 未建/挂错父节点/内容过期都在这里修复 —— 不依赖设置开关触发 */
+            _syncRenderDiv() {
+                const ta = this.textWidget && (this.textWidget.inputEl || this.textWidget.element);
+                if (!ta) return;
+                const div = this._ensureRenderDiv();   // 每帧确保存在 + 挂对父节点
+                if (!div) return;
+                div.style.position = "absolute";
+                div.style.left = ta.style.left || "0px";
+                div.style.top = ta.style.top || "0px";
+                div.style.width = ta.style.width || (this.size[0] - 16) + "px";
+                div.style.height = this._bodyHeightPx() + "px";   // 显式像素高度
+                div.style.zIndex = ta.style.zIndex || "1";
+                div.style.overflow = "hidden";
+                // 正文被外部修改（工作流加载等）时重渲染；旧版占位提示先清空
+                if (!this._editMode) {
+                    const w = (this.widgets || []).find((x) => x.name === "text");
+                    this._clearLegacyPlaceholder(w);
+                    const val = w ? String(w.value ?? "") : "";
+                    if (div.__lastText !== val) this._renderIntoDiv();
+                }
+            }
+
+            /** 双击正文 → 编辑态（与 MarkdownNote 一致）；同时收起面板/色卡 */
+            _enterEditMode() {
+                if (this._editMode) return;
+                if (this.settingsOpen) this._toggleSettings(false);
+                if (this.openMenu) this._toggleColorMenu(false);
+                this._editMode = true;
+                this.applyNoteStyles();
+                const ta = this.textWidget && (this.textWidget.inputEl || this.textWidget.element);
+                if (ta && ta.focus) setTimeout(() => { try { ta.focus(); } catch {} }, 0);
+                this.setDirtyCanvas(true, true);
+            }
+
+            /** 失焦 → 回到渲染态 */
+            _exitEditMode() {
+                if (!this._editMode) return;
+                this._editMode = false;
+                this._renderIntoDiv();
+                this.applyNoteStyles();
+                this.setDirtyCanvas(true, true);
+            }
+
+            onRemoved() {
+                if (this._renderDiv) { try { this._renderDiv.remove(); } catch {} this._renderDiv = null; }
             }
 
             // ---------- 齿轮与设置面板 ----------
@@ -501,8 +724,10 @@ app.registerExtension({
                 ctx.textAlign = "left";   // 不污染后续标题绘制
             }
 
-            /** 主体绘制：设置面板（展开时），纯 canvas */
+            /** 主体绘制：设置面板（展开时），纯 canvas；并同步渲染层位置 */
             onDrawBackground(ctx) {
+                // 渲染层逐帧跟随 textarea 位置（前端每帧可能重排）
+                this._syncRenderDiv();
                 // Vue 重建 DOM 后样式丢失的自检重放
                 const ta0 = this.textWidget && (this.textWidget.inputEl || this.textWidget.element);
                 if (ta0 && ta0.dataset && ta0.dataset.tnStyled !== "1") this.applyNoteStyles();
@@ -669,6 +894,7 @@ app.registerExtension({
                 this.color = borderColor === "transparent" ? bgColor : borderColor;
 
                 const ta = this.textWidget && (this.textWidget.inputEl || this.textWidget.element);
+                const bodyPx = this._bodyHeightPx();
                 if (ta) {
                     const s = ta.style;
                     if (ta.dataset) ta.dataset.tnStyled = "1";
@@ -685,15 +911,41 @@ app.registerExtension({
                     s.padding = "0";
                     s.boxSizing = "border-box";
                     s.width = "100%";
-                    s.height = (this.settingsOpen && this._previewH)
-                        ? this._previewH + "px"
-                        : "100%";
+                    s.height = bodyPx + "px";   // 显式像素高度，编辑态立即可见可输入
                     s.resize = "none";
+                    // 编辑态才显示 textarea；渲染态隐藏（由渲染层 div 接管）
+                    s.display = this._editMode ? "" : "none";
+                    s.zIndex = "2";
+                    // 空便签时用 placeholder 继续显示提示（真正的 value 为空，直接就能输入）
+                    if ("placeholder" in ta) ta.placeholder = t("defaultText");
+                    if (ta.classList && ta.classList.add) ta.classList.add("tn-textnote-input");
+                    ensurePlaceholderStyle();
+                }
+                // 渲染层跟随同样式
+                const div = this._ensureRenderDiv();
+                if (div) {
+                    const ds = div.style;
+                    ds.fontSize = fs + "px";
+                    ds.lineHeight = String(lh);
+                    ds.textAlign = align;
+                    ds.fontWeight = bold ? "600" : "400";
+                    ds.color = fontColor;
+                    ds.fontFamily = '"Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif';
+                    ds.background = "transparent";
+                    ds.padding = "0";
+                    ds.boxSizing = "border-box";
+                    ds.width = "100%";
+                    ds.height = bodyPx + "px";
+                    ds.userSelect = "none";
+                    // 设置面板展开时正文预览区照样显示（面板画在预览区下方，不重叠），
+                    // 这样边调样式边看效果；编辑态只用 opacity 让位给 textarea
+                    ds.display = "";
+                    ds.opacity = this._editMode ? "0" : "1";
                 }
                 if (this.setDirtyCanvas) this.setDirtyCanvas(true, false);
             }
 
-            /** 工作流加载/粘贴：迁移旧中文存储 → 重放样式 → 复位面板 */
+            /** 工作流加载/粘贴：迁移旧中文存储 → 重放样式 → 复位面板与编辑态 */
             onConfigure(info) {
                 try {
                     const pairs = (info && info.widgets) || [];
@@ -732,8 +984,14 @@ app.registerExtension({
                 this.settingsOpen = false;
                 this.openMenu = null;
                 this._previewH = null;
+                this._editMode = false;
                 if (this.textWidget) delete this.textWidget.computeSize;
-                setTimeout(() => this.applyNoteStyles(), 0);
+                setTimeout(() => {
+                    this._clearLegacyPlaceholder();   // 旧版占位提示 → 清空，恢复为空便签
+                    this._ensureRenderDiv();
+                    this._renderIntoDiv();
+                    this.applyNoteStyles();
+                }, 0);
             }
         }
 
@@ -743,6 +1001,6 @@ app.registerExtension({
         }));
         TextNoteNode.category = "utilities";   // 与官方 Note 同分类
 
-        console.info("[TextNote] v4 sticky-note registered (canvas annotation, gear settings, zh/en UI)");
+        console.info("[TextNote] v4.2 sticky-note registered (empty default text, placeholder hint, gear settings, zh/en UI)");
     },
 });
