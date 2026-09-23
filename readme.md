@@ -6,9 +6,12 @@
 
 ![version](https://img.shields.io/badge/version-4.2.0-blue) ![ComfyUI](https://img.shields.io/badge/ComfyUI-0.35%2B-green) ![license](https://img.shields.io/badge/license-MIT-orange)
 
-| Settings panel | Text color palette |
+|  |  |
 |---|---|
+| **Settings panel** | **Text color palette** |
 | ![settings panel](assets/demo_en_1_settings_panel.png) | ![text palette](assets/demo_en_2_text_palette.png) |
+| **Background color palette** | **A brand-new note** — empty body, the grey text is only a hint |
+| ![bg palette](assets/demo_en_3_bg_palette.png) | ![empty note with hint](assets/demo_en_4_empty_hint.png) |
 
 *UI language follows your browser (English shown above, Chinese below). / 界面语言跟随浏览器（上图为英文界面，中文界面见下文）。*
 
@@ -55,9 +58,17 @@ No dependencies beyond what ComfyUI already ships (nothing to pip-install).
 
 1. Restart ComfyUI (or just reload the browser page)
 2. Double-click empty canvas → search **`TextNote`** (category `utilities`, next to the built-in Note)
-3. Type your note; click the **⚙** in the top-right corner of the title bar to style it
+3. **Double-click the note body** and type; click the **⚙** in the top-right corner of the title bar to style it
 
 A new note starts **empty**: the grey hint (*"Write notes here…"*) is only a placeholder — double-click and type straight away, there is nothing to delete first. Workflows saved with the old version, where that hint was stored as real text, are cleaned up automatically on load.
+
+### Writing notes: clickable links & light Markdown
+
+The note body has two states: **edit** (double-click it → a text box appears, blur to leave) and **render** (everything else → links are clickable). Outside edit mode:
+
+- **Links** — `[label](https://example.com)` renders as a clickable link (underlined, opens in a **new tab**). Bare `https://…`, `http://…` and `www.…` addresses are turned into links automatically. Only `http`, `https`, `mailto` and `ftp` are allowed; `javascript:` / `data:` URLs are rejected.
+- **Light Markdown** — `# Heading` (levels 1–4), `- item` / `* item` bullet lists, and `**bold**`.
+- Everything else is shown as plain text, HTML-escaped, so a note can never inject markup into the page.
 
 ### Compatibility
 
@@ -84,6 +95,10 @@ Edit `web/textnote_canvas.js`:
 | 设置面板 | 文字颜色色卡 | 背景颜色色卡 |
 |---|---|---|
 | ![设置面板](assets/demo_01_settings_panel.png) | ![文字颜色](assets/demo_02_text_palette.png) | ![背景颜色](assets/demo_03_bg_palette.png) |
+
+**新建便签**：正文是空的，画布上的灰字只是占位提示，双击就能直接输入：
+
+![空便签的灰色占位提示](assets/demo_04_empty_hint.png)
 
 - **没有输入口、没有输出口、不参与执行**（虚拟节点），跑工作流零开销
 - 正文和全部样式**随工作流 JSON 一起保存**，分享 / 拷贝不丢
@@ -120,9 +135,17 @@ ComfyUI/custom_nodes/ComfyUI-TextNote/
 
 1. 重启 ComfyUI（或刷新浏览器页面）
 2. 双击画布空白处搜索 **`便签`** 或 **`TextNote`**（`utilities` 分类，官方 Note 旁边）
-3. 直接写字；点标题栏右上角 **⚙** 调样式
+3. **双击便签正文**直接写字；点标题栏右上角 **⚙** 调样式
 
 新建便签的正文是**空的**：画布上的灰色小字（"在这里写说明、备注…"）**只是占位提示**，双击就能直接输入，不用先把它删掉。旧版本把这段提示当成正文存进工作流的情况，加载时会自动识别并清空。
+
+### 写便签：超链接与轻量 Markdown
+
+正文有两种状态：**编辑态**（双击正文 → 出现输入框，点别处退出）和**渲染态**（其余时候 → 链接可点击）。非编辑态下支持：
+
+- **超链接** —— `[标题](https://example.com)` 会渲染成可点击的链接（带下划线，**新标签页**打开）；直接写 `https://…` / `http://…` / `www.…` 也会自动变成链接。只放行 `http`、`https`、`mailto`、`ftp`，`javascript:` / `data:` 一律拦截。
+- **轻量 Markdown** —— `# 标题`（1–4 级）、`- 条目` / `* 条目` 列表、`**加粗**`。
+- 其余内容按纯文本显示（HTML 转义），便签无法往页面里注入任何标记。
 
 ### 兼容性
 
