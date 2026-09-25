@@ -79,7 +79,7 @@ While in edit mode the note body is a plain text box, so selecting and editing t
 
 - Developed and tested against **ComfyUI 0.35.1 / frontend 1.51.10**; re-verified on **frontend 1.53.6** (widget/multiline DOM internals). Uses standard `LGraphNode` + `registerCustomNodes` extension APIs
 - Caret placement on click uses the standard `caretPositionFromPoint` API (Chrome / Edge / Firefox); on engines without it, the caret falls back to the clicked line instead of the very end
-- 23 mocked-browser assertions cover registration, i18n, palettes, panel geometry, click hit-zones and legacy migration
+- **117 mocked-browser assertions** (`node tests/check.js`, no dependencies) cover registration, i18n, placeholder hints, legacy migration, the render layer, click-to-edit + caret placement, palettes, panel geometry and drawing alignment — each run against both the `ComfyWidgets.STRING` path and the `addWidget` fallback
 
 ### Customize
 
@@ -88,7 +88,7 @@ Edit `web/textnote_canvas.js`:
 - `FONT_COLORS` / `BG_COLORS` / `BORDER_COLORS` — palettes (`{ hex, zh, en }`)
 - `I18N` — UI strings
 - `NUM_ROWS` — min/max/step for numeric rows
-- Refresh the browser page after editing.
+- Refresh the browser page after editing, and run `node tests/check.js` to make sure nothing regressed (117 assertions, no dependencies)
 
 ---
 
@@ -162,6 +162,7 @@ ComfyUI/custom_nodes/ComfyUI-TextNote/
 
 - 在 **ComfyUI 0.35.1 / 前端 1.51.10** 上开发并实测；在 **前端 1.53.6** 上复测通过（多行控件 DOM 实现）。使用标准 `LGraphNode` + `registerCustomNodes` 扩展 API
 - 单击定位光标用标准 `caretPositionFromPoint`（Chrome / Edge / Firefox）；浏览器不支持时退化为「放到点击那一行」，不会掉到末尾
+- **117 项模拟浏览器断言**（`node tests/check.js`，无需装依赖）覆盖注册、双语文案、占位提示与旧版迁移、渲染层、单击编辑与光标定位、色板、面板几何与绘制对齐；`ComfyWidgets.STRING` 与 `addWidget` 两条控件来源各跑一遍
 
 ### 自定义
 
@@ -170,7 +171,7 @@ ComfyUI/custom_nodes/ComfyUI-TextNote/
 - `FONT_COLORS` / `BG_COLORS` / `BORDER_COLORS` — 三张色表（`{ hex, zh, en }`）
 - `I18N` — 界面文案
 - `NUM_ROWS` — 字号/行距的最小值、最大值、步长
-- 改完刷新浏览器页面即可。
+- 改完刷新浏览器页面；再跑一遍 `node tests/check.js` 自检（117 项断言，无需装依赖）
 
 ## License / 许可
 

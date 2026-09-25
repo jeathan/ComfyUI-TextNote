@@ -885,9 +885,12 @@ app.registerExtension({
                     } else if (MENU_ROWS.includes(key)) {
                         const hex = w ? String(w.value) : "";
                         const nameText = colorName(hex, paletteFor(key));
-                        ctx.textAlign = "left";
+                        // 颜色名右对齐到色块左侧（色块占 right-18 … right，留 6px 间隙）。
+                        // 原来左对齐在 right-62 起笔，英文长名字（Dark gray / Slate blue /
+                        // Dusty violet…）会往右长、压到色块上，看起来像被裁掉。
+                        ctx.textAlign = "right";
                         ctx.fillStyle = "#ECEFF1";
-                        ctx.fillText(nameText, right - 62, midY);
+                        ctx.fillText(nameText, right - 24, midY);
                         if (hex === "transparent") {
                             ctx.strokeStyle = "rgba(128,128,128,0.8)";
                             ctx.lineWidth = 1;
@@ -973,9 +976,17 @@ app.registerExtension({
                         ctx.strokeRect(cell.x + 1.5, cell.y + 1.5, cell.w - 3, cell.h - 3);
                     }
                     ctx.fillStyle = "rgba(236,239,241,0.85)";
-                    ctx.font = "11px sans-serif";
                     ctx.textAlign = "left";
-                    ctx.fillText(cell.c[LANG()] || cell.c.en, cell.x + 26, cell.y + cell.h / 2);
+                    // 色卡单元格里的名字：装不下就逐级缩字号（英文长名如 Dusty violet 刚好卡边）
+                    const cellText = cell.c[LANG()] || cell.c.en;
+                    const avail = cell.w - 28;
+                    let cellFs = 11;
+                    ctx.font = cellFs + "px sans-serif";
+                    while (cellFs > 8 && ctx.measureText(cellText).width > avail) {
+                        cellFs--;
+                        ctx.font = cellFs + "px sans-serif";
+                    }
+                    ctx.fillText(cellText, cell.x + 26, cell.y + cell.h / 2);
                 }
                 ctx.restore();
             }
