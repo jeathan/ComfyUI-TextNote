@@ -1,19 +1,24 @@
 /**
- * ComfyUI-TextNote v4.2 — 画布便签（纯正文 + 齿轮设置 + 界面语言自适应 + 超链接）
+ * ComfyUI-TextNote v4.3 — 画布便签（纯正文 + 齿轮设置 + 界面语言自适应 + 超链接）
  *
  * 画布上只显示便签正文；所有参数收进右上角齿轮设置面板，面板在正文下方，
  * 边调边看不遮挡。无输入口/输出口，不参与执行；内容与设置随工作流 JSON 保存。
  *
+ * v4.3 变更（单击编辑 + 光标落在点击处）：
+ * - 单击正文任意位置即进入编辑，不再需要双击；光标直接落在你点的那个字上，
+ *   不用再用方向键一点点挪（点正文最后一行下方的空白 = 光标到末尾）
+ * - 按住拖动（挪节点等）不会误进编辑态；点超链接仍是打开链接，不进编辑
+ *
  * v4.2 变更（占位提示不再写进正文）：
  * - 新建便签的正文默认为空字符串；「在这里写说明、备注…」等文案只是占位提示
- *   （textarea placeholder + 渲染层灰字），双击即可直接输入，无需先删掉提示文字
+ *   （textarea placeholder + 渲染层灰字），单击即可直接输入，无需先删掉提示文字
  * - 旧工作流里被当成正文保存过的占位提示，加载时自动识别并清空
  * - 顺带修好：齿轮设置面板展开时，正文预览区不再变成空白（面板在下方，本就不重叠）
  *
  * v4.1 变更（学习 MarkdownNote）：
  * - 正文支持超链接：[标题](URL) 与裸 URL 自动转可点击链接（下划线 + 链接色，新标签页打开）
  * - 顺带支持轻量 Markdown：# 标题 / - 列表 / **加粗**
- * - 非编辑态 = 渲染层（链接可点击）；双击正文进入编辑态（textarea），失焦回到渲染层
+ * - 非编辑态 = 渲染层（链接可点击）；编辑态 = textarea，失焦回到渲染层
  */
 import { app } from "/scripts/app.js";
 
@@ -34,7 +39,7 @@ const I18N = {
         font_color: "文字颜色", bg_color: "背景颜色", border_color: "边框颜色",
         bold: "加粗", on: "开", off: "关",
         left: "左对齐", center: "居中", right: "右对齐",
-        defaultText: "在这里写说明、备注…\n双击编辑；支持 [标题](链接) 超链接",
+        defaultText: "在这里写说明、备注…\n单击即可输入；支持 [标题](链接) 超链接",
         title: "📝 便签 TextNote",
     },
     en: {
@@ -43,7 +48,7 @@ const I18N = {
         font_color: "Text color", bg_color: "Background color", border_color: "Border color",
         bold: "Bold", on: "On", off: "Off",
         left: "Left", center: "Center", right: "Right",
-        defaultText: "Write notes here…\nDouble-click to edit; [label](link) supported",
+        defaultText: "Write notes here…\nClick to edit; [label](link) supported",
         title: "📝 TextNote (sticky note)",
     },
 };
@@ -166,12 +171,13 @@ function normalizeNoteText(s) {
 }
 
 /** 历史上曾被写进正文默认值的占位文案；加载旧工作流时按此表清空。
- *  这些都是「真被当成正文存过」的历史字面量，因此独立于 I18N 冻结在此，不再随界面文案变动。 */
+ *  这些都是「真被当成正文存过」的历史字面量，因此独立于 I18N 冻结在此，不再随界面文案变动
+ *  —— 例如 v4.3 把提示改成了「单击即可输入」，这里仍保留 v4.1/v4.2 的「双击编辑」那一版。 */
 const LEGACY_PLACEHOLDER_TEXTS = new Set([
     "在这里写说明、备注…",                                              // v3 / v4.0 中文
     "Write notes and remarks here",                                     // v4.0 英文
-    "在这里写说明、备注…\n双击编辑；支持 [标题](链接) 超链接",              // v4.1 中文
-    "Write notes here…\nDouble-click to edit; [label](link) supported",  // v4.1 英文
+    "在这里写说明、备注…\n双击编辑；支持 [标题](链接) 超链接",              // v4.1–v4.2 中文
+    "Write notes here…\nDouble-click to edit; [label](link) supported",  // v4.1–v4.2 英文
 ].map(normalizeNoteText));
 
 /** textarea 的 placeholder 颜色跟随正文色（Chrome 默认灰在深色便签上偏暗） */
@@ -188,6 +194,9 @@ function ensurePlaceholderStyle() {
 
 const GEAR = "\u2699";       // ⚙
 const CLOSE = "\u2715";      // ✕
+
+// 单击正文进编辑：按下与抬起位置相差超过这个像素数就当作拖动，不进编辑
+const CLICK_DRAG_TOLERANCE = 4;
 
 // 设置面板布局常量
 const PANEL_ROW_H = 24;
@@ -344,18 +353,23 @@ app.registerExtension({
                 if (div.parentElement !== ta.parentElement) {
                     ta.parentElement.appendChild(div);
                 }
-                // 渲染层交互：双击进编辑；链接点击直接放行（新标签页打开）
+                // 渲染层交互：单击进编辑（光标落在点击处）；链接只放行默认行为；拖动不进编辑
                 if (!div.__tnBound && div.addEventListener) {
-                    div.addEventListener("dblclick", (ev) => {
-                        if (ev.target && ev.target.closest && ev.target.closest("a")) return;   // 链接上双击不进编辑
-                        ev.stopPropagation();
-                        this._enterEditMode();
+                    div.addEventListener("mousedown", (ev) => {
+                        div.__tnDown = { x: ev.clientX, y: ev.clientY };
                     });
                     div.addEventListener("click", (ev) => {
-                        // 点在链接上：放行默认行为（新标签页打开），其余冒泡给画布拖动
+                        const down = div.__tnDown;
+                        div.__tnDown = null;
+                        // 点在链接上：新标签页打开，不进编辑态
                         if (ev.target && ev.target.closest && ev.target.closest("a")) {
                             ev.stopPropagation();
+                            return;
                         }
+                        // 按住拖动（挪节点等）不算单击
+                        if (down && (Math.abs(ev.clientX - down.x) > CLICK_DRAG_TOLERANCE ||
+                                     Math.abs(ev.clientY - down.y) > CLICK_DRAG_TOLERANCE)) return;
+                        this._enterEditMode(ev);
                     });
                     div.__tnBound = true;
                 }
@@ -410,15 +424,105 @@ app.registerExtension({
                 }
             }
 
-            /** 双击正文 → 编辑态（与 MarkdownNote 一致）；同时收起面板/色卡 */
-            _enterEditMode() {
+            /** 把鼠标坐标换算成正文里的字符下标并把光标放过去（命中 textarea 才返回 true）。
+             *  浏览器自带的 caretPositionFromPoint 对 textarea 直接给出 value 里的字符下标，
+             *  换行/居中/自动折行都由浏览器算，不需要自己排版。 */
+            _caretFromPoint(x, y) {
+                const ta = this.textWidget && (this.textWidget.inputEl || this.textWidget.element);
+                if (!ta || typeof document === "undefined" ||
+                    typeof ta.setSelectionRange !== "function") return false;
+                const end = String(ta.value ?? "").length;
+
+                // 点在正文最后一行下方的空白处 → 光标放到末尾（最常见的「接着写」）
+                const last = this._renderDiv && this._renderDiv.lastElementChild;
+                if (last && last.getBoundingClientRect) {
+                    const r = last.getBoundingClientRect();
+                    if (r && r.height > 0 && y > r.bottom) {
+                        try { ta.setSelectionRange(end, end); } catch { return false; }
+                        return true;
+                    }
+                }
+
+                let hit = false, idx = 0;
+                try {
+                    if (typeof document.caretPositionFromPoint === "function") {
+                        const p = document.caretPositionFromPoint(x, y);
+                        if (p && p.offsetNode === ta && typeof p.offset === "number") {
+                            hit = true; idx = p.offset;
+                        }
+                    }
+                    if (!hit && typeof document.caretRangeFromPoint === "function") {
+                        // 旧接口：WebKit 系可能返回 textarea 内部文本节点
+                        const r = document.caretRangeFromPoint(x, y);
+                        const n = r && r.startContainer;
+                        if (n === ta && typeof r.startOffset === "number") {
+                            hit = true; idx = r.startOffset;
+                        } else if (n && n.nodeType === 3) {
+                            const host = n.parentElement && n.parentElement.closest
+                                ? n.parentElement.closest("textarea") : null;
+                            if (host === ta) { hit = true; idx = r.startOffset; }
+                        }
+                    }
+                } catch { hit = false; }
+
+                if (!hit) return false;                         // 点在控件外/浏览器不支持 → 交给调用方兜底
+                const at = Math.max(0, Math.min(end, idx));     // 越界/异常下标夹进合法范围
+                try { ta.setSelectionRange(at, at); } catch { return false; }
+                return true;
+            }
+
+            /** 命中测试拿不到结果时的兜底：按行高估算点在第几行，把光标放到那一行行首
+             *  （估不出来才退到末尾）—— 总比让用户从别处一路按方向键要好 */
+            _fallbackCaret(x, y, ta) {
+                const el = ta || (this.textWidget && (this.textWidget.inputEl || this.textWidget.element));
+                if (!el || typeof el.setSelectionRange !== "function") return;
+                const text = String(el.value ?? "");
+                let at = text.length;
+                try {
+                    const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+                    const lh = (parseFloat(typeof getComputedStyle === "function"
+                        ? getComputedStyle(el).lineHeight : "") || 0) || 20;
+                    if (rect && rect.height > 0 && typeof y === "number") {
+                        const rows = text.split("\n");
+                        if (y > rect.top + rows.length * lh) {
+                            at = text.length;                        // 点在正文最后一行之下 → 末尾
+                        } else {
+                            const row = Math.max(0, Math.min(rows.length - 1,
+                                Math.floor((y - rect.top) / lh)));
+                            at = rows.slice(0, row).join("\n").length + (row > 0 ? 1 : 0);
+                        }
+                    }
+                } catch { at = text.length; }
+                try { el.setSelectionRange(at, at); } catch {}
+            }
+
+            /** 单击正文 → 编辑态，并把光标落在点击位置；同时收起面板/色卡 */
+            _enterEditMode(ev) {
                 if (this._editMode) return;
                 if (this.settingsOpen) this._toggleSettings(false);
                 if (this.openMenu) this._toggleColorMenu(false);
                 this._editMode = true;
-                this.applyNoteStyles();
+                this.applyNoteStyles();          // textarea 立刻可见（渲染层转透明且不再吃点击）
                 const ta = this.textWidget && (this.textWidget.inputEl || this.textWidget.element);
-                if (ta && ta.focus) setTimeout(() => { try { ta.focus(); } catch {} }, 0);
+                if (ta && ta.focus) {
+                    const pt = ev && typeof ev.clientX === "number"
+                        ? { x: ev.clientX, y: ev.clientY } : null;
+                    const place = () => {
+                        try { ta.focus(); } catch {}
+                        if (!pt) return true;
+                        if (this._caretFromPoint(pt.x, pt.y)) return true;
+                        this._fallbackCaret(pt.x, pt.y, ta);   // 先给个近似位置
+                        return false;                          // 让调用方下一帧再精确试一次
+                    };
+                    setTimeout(() => {
+                        if (place() === false && typeof requestAnimationFrame === "function") {
+                            requestAnimationFrame(() => {
+                                try { ta.focus(); } catch {}
+                                this._caretFromPoint(pt.x, pt.y);
+                            });
+                        }
+                    }, 0);
+                }
                 this.setDirtyCanvas(true, true);
             }
 
@@ -941,6 +1045,10 @@ app.registerExtension({
                     // 这样边调样式边看效果；编辑态只用 opacity 让位给 textarea
                     ds.display = "";
                     ds.opacity = this._editMode ? "0" : "1";
+                    // 编辑态必须连点击一起让开：div 还压在上面的话，既吞掉点击，
+                    // 也会让 caretPositionFromPoint 命中 div 而不是 textarea ——
+                    // 表现就是「点了没反应，只能用方向键一点点挪光标」
+                    ds.pointerEvents = this._editMode ? "none" : "auto";
                 }
                 if (this.setDirtyCanvas) this.setDirtyCanvas(true, false);
             }
@@ -1001,6 +1109,6 @@ app.registerExtension({
         }));
         TextNoteNode.category = "utilities";   // 与官方 Note 同分类
 
-        console.info("[TextNote] v4.2 sticky-note registered (empty default text, placeholder hint, gear settings, zh/en UI)");
+        console.info("[TextNote] v4.3 sticky-note registered (click-to-edit at caret, placeholder hint, gear settings, zh/en UI)");
     },
 });
