@@ -31,7 +31,7 @@ const LANG = () => {
 };
 
 // defaultText = 空便签时的「占位提示」文案，只用于显示（渲染层灰字 / textarea placeholder），
-// 绝不写入正文控件，因此双击编辑时不会出现需要先删掉的假文字
+// 绝不写入正文控件，因此单击进编辑时不会出现需要先删掉的假文字
 const I18N = {
     zh: {
         settings: "设置",
@@ -303,7 +303,7 @@ app.registerExtension({
                 // hideOnZoom:false — 任何缩放级别都保持可见
                 //（默认 true 会在 LOD 阈值约 57% 以下隐藏 DOM 编辑区）
                 // 默认值必须是空字符串：提示文案只做占位显示（textarea placeholder + 渲染层灰字），
-                // 否则用户双击编辑时会看到一段需要先删掉的假正文。
+                // 否则用户单击进编辑时会看到一段需要先删掉的假正文。
                 // placeholder 由前端 createMultilineInputElement 原生写到 textarea 上。
                 const CW = window.comfyAPI?.widgets?.ComfyWidgets;
                 if (CW) {
